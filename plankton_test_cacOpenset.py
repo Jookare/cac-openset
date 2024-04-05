@@ -14,7 +14,7 @@ from utils import find_anchor_means, gather_outputs
 import metrics
 import scipy.stats as st
 import numpy as np
-from datasets.dataset_utils import create_dataset
+from dataset_utils import create_dataset
 
 
 transform = v2.Compose(

@@ -3,7 +3,7 @@ from torchvision.transforms import v2
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms.functional import to_pil_image
 from torch.utils.data import random_split
-from datasets.dataset_utils import create_dataset
+from dataset_utils import create_dataset
 import torch.nn as nn
 import torch.optim as optim
 
