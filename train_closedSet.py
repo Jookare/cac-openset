@@ -35,7 +35,8 @@ parser.add_argument('--name', default = "", type = str, help='Optional name for 
 args = parser.parse_args()
 
 if args.tensorboard:
-	from tensorboardX import SummaryWriter
+	from torch.utils.tensorboard import SummaryWriter
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 

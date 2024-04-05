@@ -1,17 +1,13 @@
-"""
-	Train an open set classifier with CAC Loss on the datasets.
-
-	The overall setup of this training script has been adapted from https://github.com/kuangliu/pytorch-cifar
-
-	Dimity Miller, 2020
-"""
 import torch
+from torchvision.transforms import v2
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms.functional import to_pil_image
+from torch.utils.data import random_split
+from datasets.dataset_utils import create_dataset
 import torch.nn as nn
 import torch.optim as optim
 
 import json
-import torchvision
-import torchvision.transforms as tf
 
 import argparse
 
@@ -24,10 +20,23 @@ from utils import progress_bar
 import os
 import numpy as np
 
+transform = v2.Compose(
+    [
+        v2.Grayscale(num_output_channels=1),
+        v2.RandomAffine(degrees=(0, 180), translate=(0, 0.1), scale=(0.95, 1.05), fill=255),
+        v2.ToImage(),
+        v2.ToDtype(torch.float32, scale=True),
+        v2.Normalize(mean=[0], 
+                     std=[1]),
+    ]
+)
+# Define path
+path = "./main_dataset"
+
 
 parser = argparse.ArgumentParser(description='Open Set Classifier Training')
 parser.add_argument('--dataset', required = True, type = str, help='Dataset for training', 
-									choices = ['MNIST', 'SVHN', 'CIFAR10', 'CIFAR+10', 'CIFAR+50', 'TinyImageNet'])
+									choices = ['PLANKTON'])
 parser.add_argument('--trial', required = True, type = int, help='Trial number, 0-4 provided')
 parser.add_argument('--resume', '-r', action='store_true', help='Resume from the checkpoint')
 parser.add_argument('--alpha', default = 10, type = int, help='Magnitude of the anchor point')
@@ -35,6 +44,9 @@ parser.add_argument('--lbda', default = 0.1, type = float, help='Weighting of An
 parser.add_argument('--tensorboard', '-t', action='store_true', help='Plot on tensorboardX')
 parser.add_argument('--name', default = "myTest", type = str, help='Optional name for saving and tensorboard') 
 args = parser.parse_args()
+
+if args.tensorboard:
+	from torch.utils.tensorboard import SummaryWriter
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -50,11 +62,25 @@ print('==> Preparing data..')
 with open('datasets/config.json') as config_file:
 	cfg = json.load(config_file)[args.dataset]
 
-trainloader, valloader, _, mapping = dataHelper.get_train_loaders(args.dataset, args.trial, cfg)
+# Dataset id for open-set test set
+test_idx = [3 * (args.trial), 3 * (args.trial) + 1, 3 * (args.trial) + 2]
+
+train_dataset, test_dataset = create_dataset(path, transform, test_idx=test_idx)
+
+# Split the dataset to training and validation and further split the validation to also testing
+training_set, validation_set = random_split(train_dataset, [0.8, 0.2])
+
+batch_size = cfg["batch_size"]
+trainloader = DataLoader(training_set, batch_size=batch_size, shuffle=True)
+valloader = DataLoader(validation_set, batch_size=batch_size, shuffle=True)
+testloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+mapping = [None for i in range(cfg['num_classes'])]
+for i in range(15):
+    mapping[i] = i
 
 print('==> Building network..')
-net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'],
-										init_weights = not args.resume, dropout = cfg['dropout'])
+net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
 
 # initialising with anchors
 anchors = torch.diag(torch.Tensor([args.alpha for i in range(cfg['num_known_classes'])]))	
@@ -63,22 +89,16 @@ net.set_anchors(anchors)
 net = net.to(device)
 training_iter = int(args.resume)
 
-if args.resume:
-	# Load checkpoint.
-	print('==> Resuming from checkpoint..')
-	assert os.path.isdir('networks/weights'), 'Error: no checkpoint directory found!'
-	
-	checkpoint = torch.load('networks/weights/{}/{}_{}_{}CACclassifierAnchorLoss.pth'.format(args.dataset, args.dataset, args.trial, args.name))
+# Train and validation
 
-	start_epoch = checkpoint['epoch']
-
-	net_dict = net.state_dict()
-	pretrained_dict = {k: v for k, v in checkpoint['net'].items() if k in net_dict}
-	net.load_state_dict(pretrained_dict)
 
 net.train()
-optimizer = optim.SGD(net.parameters(), lr = cfg['openset_training']['learning_rate'][training_iter], 
+optimizer = optim.SGD(net.parameters(), lr = cfg['openset_training']['learning_rate'][0], 
 							momentum = 0.9, weight_decay = cfg['openset_training']['weight_decay'])
+
+if args.tensorboard:
+	writer = SummaryWriter('runs/{}_{}_{}ClosedSet'.format(args.dataset, args.trial, args.name))
+
 
 def CACLoss(distances, gt):
 	'''Returns CAC loss, as well as the Anchor and Tuplet loss components separately for visualisation.'''
@@ -107,7 +127,7 @@ def train(epoch):
 	for batch_idx, (inputs, targets) in enumerate(trainloader):
 		inputs, targets = inputs.to(device), targets.to(device)
 		#convert from original dataset label to known class label
-		targets = torch.Tensor([mapping[x] for x in targets]).long().to(device)
+		targets = torch.Tensor(targets).long().to(device)
 
 		optimizer.zero_grad()
 
@@ -128,7 +148,11 @@ def train(epoch):
 
 		progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
 			% (train_loss/(batch_idx+1), 100.*correctDist/total, correctDist, total))
-
+  
+	if args.tensorboard:
+		acc = 100.*correctDist/total
+		writer.add_scalar('train/accuracy', acc, epoch)
+  
 def val(epoch):
 	global best_acc
 	global best_anchor
@@ -141,7 +165,7 @@ def val(epoch):
 	with torch.no_grad():
 		for batch_idx, (inputs, targets) in enumerate(valloader):
 			inputs = inputs.to(device)
-			targets = torch.Tensor([mapping[x] for x in targets]).long().to(device)
+			targets = torch.Tensor(targets).long().to(device)
 
 			outputs = net(inputs)
 
@@ -171,42 +195,28 @@ def val(epoch):
 	}
 	if not os.path.isdir('networks/weights/{}'.format(args.dataset)):
 		os.mkdir('networks/weights/{}'.format(args.dataset))
-	if args.dataset == 'CIFAR+10':
-		if not os.path.isdir('networks/weights/CIFAR+50'):
-			os.mkdir('networks/weights/CIFAR+50')
+  
 	save_name = '{}_{}_{}CACclassifier'.format(args.dataset, args.trial, args.name)
 	if anchor_loss <= best_anchor:
 		print('Saving..')
 		torch.save(state, 'networks/weights/{}/'.format(args.dataset)+save_name+'AnchorLoss.pth')
 		best_anchor = anchor_loss
 
-		if args.dataset == 'CIFAR+10':
-			save_name = save_name.replace('+10', '+50')
-			torch.save(state, 'networks/weights/CIFAR+50/'+save_name+'AnchorLoss.pth')
-
 
 	if cac_loss <= best_cac:
 		print('Saving..')
 		torch.save(state, 'networks/weights/{}/'.format(args.dataset)+save_name+'CACLoss.pth')
 		best_cac = cac_loss
-		if args.dataset == 'CIFAR+10':
-			save_name = save_name.replace('+10', '+50')
-			torch.save(state, 'networks/weights/CIFAR+50/'+save_name+'CACLoss.pth')
-
 
 	if acc >= best_acc:
 		print('Saving..')
 		torch.save(state, 'networks/weights/{}/'.format(args.dataset)+save_name+'Accuracy.pth')
 		best_acc = acc
-
-		if args.dataset == 'CIFAR+10':
-			save_name = save_name.replace('+10', '+50')
-			torch.save(state, 'networks/weights/CIFAR+50/'+save_name+'Accuracy.pth')
-	
-
-
+  
+	if args.tensorboard:
+		writer.add_scalar('val/accuracy', acc, epoch)
+  
 max_epoch = cfg['openset_training']['max_epoch'][training_iter]+start_epoch
 for epoch in range(start_epoch, max_epoch):
 	train(epoch)
 	val(epoch)
-

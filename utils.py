@@ -105,6 +105,7 @@ def find_anchor_means(net, mapping, datasetName, trial_num, cfg, only_correct = 
         If dataloaderFlip is not None, also test with flipped images. 
         Returns means and covariances for each class. '''
     #find gaussians for each class
+    
     if datasetName == 'MNIST' or datasetName == "SVHN":
         loader, _ = dataHelper.get_anchor_loaders(datasetName, trial_num, cfg)
         logits, labels = gather_outputs(net, mapping, loader, only_correct = only_correct)

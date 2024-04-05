@@ -305,6 +305,46 @@
 
 			"num_known_classes": 20,
 			"num_classes": 200
-	}
+	},
+	"PLANKTON":
+		{
+			"name": "PLANKTON",
 
+			"batch_size": 60,
+
+			"closedset_training": {
+				"learning_rate": [0.01, 0.001],
+				"weight_decay": 5e-6,
+
+				"max_epoch": [35, 35]
+			},
+
+			"center_training": {
+				"learning_rate": [0.01, 0.001],
+				"weight_decay": 5e-6,
+
+				"max_epoch": [70, 70]
+			},
+
+			"openset_training": {
+				"learning_rate": [0.01, 0.001],
+				"weight_decay": 5e-6,
+
+				"max_epoch": [35, 35]
+			},
+
+			"dataloader_workers": 2,
+
+			"im_size": 224,
+			"im_channels": 1,
+
+			"data_mean": [0],
+			"data_std": [1],
+
+			"data_transforms": {"flip": 0.5, "rotate": 20, "scale_min": 0.7},
+			"dropout": 0.2,
+
+			"num_known_classes": 12,
+			"num_classes": 15
+	}
 }

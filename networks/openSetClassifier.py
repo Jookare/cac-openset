@@ -20,6 +20,8 @@ class openSetClassifier(nn.Module):
 			self.classify = nn.Linear(128*4*4, num_classes)
 		elif im_size == 64:
 			self.classify = nn.Linear(128*8*8, num_classes)
+		elif im_size == 224:
+			self.classify = nn.Linear(128*28*28, num_classes)
 		else:
 			print('That image size has not been implemented, sorry.')
 			exit()

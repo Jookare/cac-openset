@@ -1,3 +1,5 @@
 __pycache__*
 *.zip
 *.pth
+*.jpg
+/datasets/data/MNIST/raw
