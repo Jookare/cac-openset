@@ -13,26 +13,12 @@ import argparse
 
 import datasets.utils as dataHelper
 
-from networks import openSetClassifier
+from networks import openSetClip
 
 from utils import progress_bar
 
 import os
 import numpy as np
-
-transform = v2.Compose(
-    [
-        v2.Grayscale(num_output_channels=1),
-        v2.RandomAffine(degrees=(0, 180), translate=(0, 0.1), scale=(0.95, 1.05), fill=255),
-        v2.ToImage(),
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0], 
-                     std=[1]),
-    ]
-)
-# Define path
-path = "./main_dataset"
-
 
 parser = argparse.ArgumentParser(description='Open Set Classifier Training')
 parser.add_argument('--dataset', required = True, type = str, help='Dataset for training', 
@@ -42,12 +28,12 @@ parser.add_argument('--resume', '-r', action='store_true', help='Resume from the
 parser.add_argument('--alpha', default = 10, type = int, help='Magnitude of the anchor point')
 parser.add_argument('--lbda', default = 0.1, type = float, help='Weighting of Anchor loss component')
 parser.add_argument('--tensorboard', '-t', action='store_true', help='Plot on tensorboardX')
-parser.add_argument('--name', default = "myTest", type = str, help='Optional name for saving and tensorboard') 
+parser.add_argument('--name', default = "myTest", type = str, help='Optional name for saving and tensorboard')
+parser.add_argument('--clip', default = "", type = str, help='Define clip model', choices = ['clip', 'bioclip'])
 args = parser.parse_args()
 
 if args.tensorboard:
 	from torch.utils.tensorboard import SummaryWriter
-
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -62,10 +48,20 @@ print('==> Preparing data..')
 with open('datasets/config.json') as config_file:
 	cfg = json.load(config_file)[args.dataset]
 
+# Define path
+path = "./main_dataset"
+
 # Dataset id for open-set test set
 test_idx = [3 * (args.trial), 3 * (args.trial) + 1, 3 * (args.trial) + 2]
 
-train_dataset, test_dataset = create_dataset(path, transform, test_idx=test_idx)
+if args.clip == "clip":
+	import clip
+	model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+else:
+	import open_clip
+	model, _, preprocess = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', device=device, jit=False)
+
+train_dataset, test_dataset = create_dataset(path, preprocess, test_idx=test_idx)
 
 # Split the dataset to training and validation and further split the validation to also testing
 training_set, validation_set = random_split(train_dataset, [0.8, 0.2])
@@ -80,7 +76,7 @@ for i in range(15):
     mapping[i] = i
 
 print('==> Building network..')
-net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
+net = openSetClip.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
 
 # initialising with anchors
 anchors = torch.diag(torch.Tensor([args.alpha for i in range(cfg['num_known_classes'])]))	
@@ -90,7 +86,6 @@ net = net.to(device)
 training_iter = int(args.resume)
 
 # Train and validation
-
 
 net.train()
 optimizer = optim.SGD(net.parameters(), lr = cfg['openset_training']['learning_rate'][0], 
@@ -131,7 +126,8 @@ def train(epoch):
 
 		optimizer.zero_grad()
 
-		outputs = net(inputs)
+		features = model.encode_image(inputs).float()
+		outputs = net(features)
 		cacLoss, anchorLoss, tupletLoss = CACLoss(outputs[1], targets)
 
 
@@ -167,7 +163,8 @@ def val(epoch):
 			inputs = inputs.to(device)
 			targets = torch.Tensor(targets).long().to(device)
 
-			outputs = net(inputs)
+			features = model.encode_image(inputs).float()
+			outputs = net(features)
 
 			cacLoss, anchorLoss, tupletLoss = CACLoss(outputs[1], targets)
 

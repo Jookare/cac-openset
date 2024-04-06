@@ -219,3 +219,99 @@ def gather_outputs(net, mapping, dataloader, dataloaderFlip = None, data_idx = 0
     y = np.asarray(y)
 
     return X, y
+
+
+
+def gather_outputs_clip(net, model, mapping, dataloader, dataloaderFlip = None, data_idx = 0, calculate_scores = False, unknown = False, only_correct = False):
+    ''' Tests data and returns outputs and their ground truth labels.
+        data_idx        0 returns logits, 1 returns distances to anchors
+        use_softmax     True to apply softmax
+        unknown         True if an unknown dataset
+        only_correct    True to filter for correct classifications as per logits
+    '''
+    X = []
+    y = []
+
+    if calculate_scores:
+        softmax = torch.nn.Softmax(dim = 1)
+
+    for i, data in enumerate(dataloader):
+        images, labels = data
+        images = images.cuda()
+
+        if unknown:
+            targets = labels
+        else:
+            targets = torch.Tensor([mapping[x] for x in labels]).long().cuda()
+
+        features = model.encode_image(images).float()
+        outputs = net(features)
+        logits = outputs[0]
+        distances = outputs[1]
+
+        if only_correct:
+            if data_idx == 0:
+                _, predicted = torch.max(logits, 1)
+            else:
+                _, predicted = torch.min(distances, 1)
+            
+            mask = predicted == targets
+            logits = logits[mask]
+            distances = distances[mask]
+            targets = targets[mask]
+
+        if calculate_scores:
+            softmin = softmax(-distances)
+            invScores = 1-softmin
+            scores = distances*invScores
+        else:
+            if data_idx == 0:
+                scores = logits
+            if data_idx == 1:
+                scores = distances
+
+        X += scores.cpu().detach().tolist()
+        y += targets.cpu().tolist()
+
+    if dataloaderFlip is not None:
+        for i, data in enumerate(dataloaderFlip):
+            images, labels = data
+            images = images.cuda()
+
+            if unknown:
+                targets = labels
+            else:
+                targets = torch.Tensor([mapping[x] for x in labels]).long().cuda()
+            
+            features = model.encode_image(images).float()
+            outputs = net(features)
+            logits = outputs[0]
+            distances = outputs[1]
+
+            if only_correct:
+                if data_idx == 0:
+                    _, predicted = torch.max(logits, 1)
+                else:
+                    _, predicted = torch.min(distances, 1)
+                mask = predicted == targets
+                logits = logits[mask]
+                distances = distances[mask]
+                targets = targets[mask]
+                
+            if calculate_scores:
+                softmin = softmax(-distances)
+                invScores = 1-softmin
+                scores = distances*invScores
+            else:
+                if data_idx == 0:
+                    scores = logits
+                if data_idx == 1:
+                    scores = distances
+
+            X += scores.cpu().detach().tolist()
+            y += targets.cpu().tolist()
+
+    X = np.asarray(X)
+    y = np.asarray(y)
+
+    return X, y
