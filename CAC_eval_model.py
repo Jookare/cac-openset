@@ -77,10 +77,6 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	unknownloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
 	mapping = [None for i in range(cfg["num_classes"])]
-	
-	for i in range(15):
-		mapping[i] = i
-
 
 	print('==> Building open set network for trial {}..'.format(trial_num))
 	net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
@@ -97,7 +93,7 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	#find mean anchors for each class
 	anchor_means = find_anchor_means(net, mapping, knownloader,  only_correct = True)
 	
-	net.set_anchors(torch.Tensor(anchor_means))
+	net.set_anchors(torch.Tensor(np.array(anchor_means)))
 
 	
 	print('==> Evaluating open set network accuracy for trial {}..'.format(trial_num))
