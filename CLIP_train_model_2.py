@@ -12,7 +12,7 @@ import argparse
 
 import datasets.utils as dataHelper
 
-from networks import openSetClip
+from networks import openSetClip_2
 
 from utils import progress_bar
 
@@ -55,10 +55,10 @@ test_idx = [3 * (args.trial), 3 * (args.trial) + 1, 3 * (args.trial) + 2]
 
 if args.clip == "clip":
 	import clip
-	model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+	_, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 else:
 	import open_clip
-	model, _, preprocess = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', device=device, jit=False)
+	_, _, preprocess = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', device=device, jit=False)
 
 train_dataset, test_dataset = create_dataset(path, preprocess, test_idx=test_idx)
 
@@ -73,7 +73,7 @@ testloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 mapping = [i for i in range(cfg['num_classes'])]
 
 print('==> Building network..')
-net = openSetClip.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
+net = openSetClip_2.openSetClassifier(cfg['num_known_classes'], cfg['im_size'], args.clip, device=device)
 
 # initialising with anchors
 anchors = torch.diag(torch.Tensor([args.alpha for i in range(cfg['num_known_classes'])]))	
@@ -122,9 +122,8 @@ def train(epoch):
 		targets = torch.Tensor(targets).long().to(device)
 
 		optimizer.zero_grad()
-
-		features = model.encode_image(inputs).float()
-		outputs = net(features)
+  
+		outputs = net(inputs)
 		cacLoss, anchorLoss, tupletLoss = CACLoss(outputs[1], targets)
 
 
@@ -160,8 +159,7 @@ def val(epoch):
 			inputs = inputs.to(device)
 			targets = torch.Tensor(targets).long().to(device)
 
-			features = model.encode_image(inputs).float()
-			outputs = net(features)
+			outputs = net(inputs)
 
 			cacLoss, anchorLoss, tupletLoss = CACLoss(outputs[1], targets)
 

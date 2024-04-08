@@ -7,9 +7,9 @@ import torchvision.transforms as tf
 import torch
 import torch.nn as nn
 
-from networks import openSetClip
+from networks import openSetClip_2
 import datasets.utils as dataHelper
-from utils import find_anchor_means, gather_outputs_clip
+from utils import find_anchor_means, gather_outputs
 
 import metrics
 import scipy.stats as st
@@ -33,17 +33,23 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 if args.clip == "clip":
 	import clip
-	model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
+	_, preprocess = clip.load("ViT-B/32", device=device, jit=False)
 else:
 	import open_clip
-	model, _, preprocess = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', device=device, jit=False)
+	_, _, preprocess = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', device=device, jit=False)
+
+all_accuracy = []
+all_auroc = []
+accuracy_known = []
+accuracy_known_th = []
+accuracy_unknown_th = []
 
 def find_anchor_means(net, mapping, loader, only_correct = False):
     ''' Tests data and fits a multivariate gaussian to each class' logits. 
         If dataloaderFlip is not None, also test with flipped images. 
         Returns means and covariances for each class. '''
     #find gaussians for each class
-    logits, labels = gather_outputs_clip(net, model, mapping, loader, only_correct = only_correct)
+    logits, labels = gather_outputs(net, mapping, loader, only_correct = only_correct)
 
     num_classes = cfg['num_known_classes']
     means = [None for i in range(num_classes)]
@@ -54,12 +60,6 @@ def find_anchor_means(net, mapping, loader, only_correct = False):
         means[cl] = np.mean(x, axis = 0)
 
     return means
-    
-all_accuracy = []
-all_auroc = []
-accuracy_known = []
-accuracy_known_th = []
-accuracy_unknown_th = []
 
 for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print('==> Preparing data for trial {}..'.format(trial_num))
@@ -78,7 +78,8 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 
 
 	print('==> Building open set network for trial {}..'.format(trial_num))
-	net = openSetClip.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
+	net = openSetClip_2.openSetClassifier(cfg['num_known_classes'], cfg['im_size'], args.clip, device=device)
+
 	checkpoint = torch.load('networks/weights/{}/{}_{}_{}CACclassifierAnchorLoss.pth'.format(args.dataset, args.dataset, trial_num, args.name))
 
 	net = net.to(device)
@@ -90,13 +91,13 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	net.eval()
 
 	#find mean anchors for each class
-	anchor_means = find_anchor_means(net, mapping, knownloader,  only_correct = True)
+	anchor_means = find_anchor_means(net, mapping, knownloader, only_correct = True)
 	
 	net.set_anchors(torch.Tensor(np.array(anchor_means)))
 
 	
 	print('==> Evaluating open set network accuracy for trial {}..'.format(trial_num))
-	x, y = gather_outputs_clip(net, model, mapping, unknownloader, data_idx = 1, calculate_scores = True)
+	x, y = gather_outputs(net, mapping, unknownloader, data_idx = 1, calculate_scores = True)
 
  
  	# Get mask for known and unknown classes
@@ -110,16 +111,19 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print("==> Testing known class accuracy before threshold")
 	acc_known, _ = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
 
-	threshold = 1.5
-	y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
-	print("==> Testing known class accuracy after threshold")
-	# print(f"Testing accuracy with threshold {threshold}")
-	acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
- 
+	threshold = 0.05
+	for th in range(1, 10):
+		threshold == 5*10**(-th)
+		y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
+		# print("==> Testing known class accuracy after threshold")
+		print(f"Testing accuracy with threshold {threshold}")
+		acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
+  
 	accuracy_known += [acc_known]
 	accuracy_known_th += [acc_known_th]
 	accuracy_unknown_th += [acc_unk_th]
- 
+
+
 	# Full accuracy score
 	accuracy = metrics.accuracy_th(y_pred, y)
 	all_accuracy += [accuracy]
@@ -127,8 +131,6 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print('==> Evaluating open set network AUROC for trial {}..'.format(trial_num))
 	auroc = metrics.auroc_th(y_pred[mask_known], y_pred[mask_unk])
 	all_auroc += [auroc]
-	print(accuracy)
-	print(auroc)
 
 mean_auroc = np.mean(all_auroc)
 mean_acc = np.mean(all_accuracy)

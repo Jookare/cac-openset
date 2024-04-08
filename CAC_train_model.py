@@ -22,12 +22,10 @@ import numpy as np
 
 transform = v2.Compose(
     [
-        v2.Grayscale(num_output_channels=1),
+        v2.Grayscale(num_output_channels=3),
         v2.RandomAffine(degrees=(0, 180), translate=(0, 0.1), scale=(0.95, 1.05), fill=255),
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0], 
-                     std=[1]),
     ]
 )
 
@@ -39,6 +37,7 @@ parser.add_argument('--resume', '-r', action='store_true', help='Resume from the
 parser.add_argument('--alpha', default = 10, type = int, help='Magnitude of the anchor point')
 parser.add_argument('--lbda', default = 0.1, type = float, help='Weighting of Anchor loss component')
 parser.add_argument('--tensorboard', '-t', action='store_true', help='Plot on tensorboardX')
+parser.add_argument('--backbone', default = None, type = str, help='Define backbone model', choices = ['resnet', 'densenet'])
 parser.add_argument('--name', default = "myTest", type = str, help='Optional name for saving and tensorboard') 
 args = parser.parse_args()
 
@@ -74,12 +73,10 @@ trainloader = DataLoader(training_set, batch_size=batch_size, shuffle=True)
 valloader = DataLoader(validation_set, batch_size=batch_size, shuffle=True)
 testloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-mapping = [None for i in range(cfg['num_classes'])]
-for i in range(15):
-    mapping[i] = i
+mapping = [i for i in range(cfg["num_classes"])]
 
 print('==> Building network..')
-net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
+net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'], backbone = args.backbone)
 
 # initialising with anchors
 anchors = torch.diag(torch.Tensor([args.alpha for i in range(cfg['num_known_classes'])]))	
@@ -132,7 +129,6 @@ def train(epoch):
 
 		outputs = net(inputs)
 		cacLoss, anchorLoss, tupletLoss = CACLoss(outputs[1], targets)
-
 
 		cacLoss.backward()
 

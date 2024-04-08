@@ -36,6 +36,7 @@ parser.add_argument('--dataset', default = "MNIST", type = str, help='Dataset fo
 									choices = ['PLANKTON'])
 parser.add_argument('--num_trials', default = 5, type = int, help='Number of trials to average results over?')
 parser.add_argument('--start_trial', default = 0, type = int, help='Trial number to start evaluation for?')
+parser.add_argument('--backbone', default = None, type = str, help='Define backbone model', choices = ['resnet', 'densenet'])
 parser.add_argument('--name', default = '', type = str, help='Name of training script?')
 args = parser.parse_args()
 
@@ -63,6 +64,10 @@ def find_anchor_means(net, mapping, loader, only_correct = False):
 all_accuracy = []
 all_auroc = []
 
+accuracy_known = []
+accuracy_known_th = []
+accuracy_unknown_th = []
+
 for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print('==> Preparing data for trial {}..'.format(trial_num))
 	with open('datasets/config.json') as config_file:
@@ -76,10 +81,10 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	knownloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 	unknownloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
-	mapping = [None for i in range(cfg["num_classes"])]
+	mapping = [i for i in range(cfg["num_classes"])]
 
 	print('==> Building open set network for trial {}..'.format(trial_num))
-	net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'])
+	net = openSetClassifier.openSetClassifier(cfg['num_known_classes'], cfg['im_channels'], cfg['im_size'], dropout = cfg['dropout'], backbone = args.backbone)
 	checkpoint = torch.load('networks/weights/{}/{}_{}_{}CACclassifierAnchorLoss.pth'.format(args.dataset, args.dataset, trial_num, args.name))
 
 	net = net.to(device)
@@ -99,7 +104,6 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print('==> Evaluating open set network accuracy for trial {}..'.format(trial_num))
 	x, y = gather_outputs(net, mapping, unknownloader, data_idx = 1, calculate_scores = True)
 
-	threshold = 2.5
  
  	# Get mask for known and unknown classes
 	mask_known, mask_unk = metrics.get_mask(y, cfg["num_known_classes"])
@@ -110,13 +114,25 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	# Get the predicted classes
 	y_pred = np.argmin(x, axis=1)
 	print("==> Testing known class accuracy before threshold")
-	metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
- 
+	acc_known, _ = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
+
+	threshold = 1.5
 	y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
 	print("==> Testing known class accuracy after threshold")
-	metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
- 
+	# print(f"Testing accuracy with threshold {threshold}")
+	acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
 
+	for th in range(0, 10):
+		threshold == 1*10**(-th)
+		y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
+		# print("==> Testing known class accuracy after threshold")
+		print(f"Testing accuracy with threshold {threshold}")
+		acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
+  
+	accuracy_known += [acc_known]
+	accuracy_known_th += [acc_known_th]
+	accuracy_unknown_th += [acc_unk_th]
+ 
 	# Full accuracy score
 	accuracy = metrics.accuracy_th(y_pred, y)
 	all_accuracy += [accuracy]
@@ -128,7 +144,14 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 mean_auroc = np.mean(all_auroc)
 mean_acc = np.mean(all_accuracy)
 
+
+print('Known class accuracy: {}'.format(accuracy_known))
+print('Known class accuracy after threshold: {}'.format(accuracy_known_th))
+print('Unknown class accuracy after threshold: {}'.format(accuracy_unknown_th))
+print()
 print('Raw Top-1 Accuracy: {}'.format(all_accuracy))
 print('Raw AUROC: {}'.format(all_auroc))
 print('Average Top-1 Accuracy: {}'.format(mean_acc))
 print('Average AUROC: {}'.format(mean_auroc))
+
+

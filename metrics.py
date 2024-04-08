@@ -61,3 +61,5 @@ def calc_accuracies(labels, predictions, train_class_num):
             unknown_accuracy
         )
     )
+
+    return known_accuracy, unknown_accuracy

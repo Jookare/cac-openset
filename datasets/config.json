@@ -310,13 +310,13 @@
 		{
 			"name": "PLANKTON",
 
-			"batch_size": 60,
+			"batch_size": 100,
 
 			"closedset_training": {
 				"learning_rate": [0.01, 0.001],
 				"weight_decay": 5e-6,
 
-				"max_epoch": [35, 35]
+				"max_epoch": [75, 35]
 			},
 
 			"center_training": {
@@ -329,8 +329,7 @@
 			"openset_training": {
 				"learning_rate": [0.01, 0.001],
 				"weight_decay": 5e-6,
-
-				"max_epoch": [35, 35]
+				"max_epoch": [75, 75]
 			},
 
 			"dataloader_workers": 2,
