@@ -28,12 +28,12 @@ class openSetClassifier(nn.Module):
         if backbone == "resnet":
             model = resnet18(weights="DEFAULT")
             num_features = model.fc.in_features
-            model.fc = nn.Linear(num_features, 128 * 28 * 28)
+            model.fc = nn.Linear(num_features, 128 * 8 * 8)
         elif backbone == "densenet":
             model = densenet121(weights="DEFAULT")
             # Change the fc layer to have only num_train_classes outputs
             num_features = model.classifier.in_features
-            model.classifier = nn.Linear(num_features, 128 * 28 * 28)
+            model.classifier = nn.Linear(num_features, 128 * 8 * 8)
         else:
             model = BaseEncoder(num_channels, init_weights, dropout)
 
@@ -44,7 +44,7 @@ class openSetClassifier(nn.Module):
         elif im_size == 64:
             self.classify = nn.Linear(128 * 8 * 8, num_classes)
         elif im_size == 224:
-            self.classify = nn.Linear(128 * 28 * 28, num_classes)
+            self.classify = nn.Linear(128 * 8 * 8, num_classes)
         else:
             print("That image size has not been implemented, sorry.")
             exit()

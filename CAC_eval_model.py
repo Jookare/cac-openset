@@ -17,22 +17,21 @@ import numpy as np
 from dataset_utils import create_dataset
 
 
+
 transform = v2.Compose(
     [
-        v2.Grayscale(num_output_channels=1),
+        v2.Grayscale(num_output_channels=3),
         v2.RandomAffine(degrees=(0, 180), translate=(0, 0.1), scale=(0.95, 1.05), fill=255),
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0], 
-                     std=[1]),
     ]
 )
 # Define path
-path = "./main_dataset"
+path = "../main_dataset"
 
 
 parser = argparse.ArgumentParser(description='Closed Set Classifier Training')
-parser.add_argument('--dataset', default = "MNIST", type = str, help='Dataset for evaluation', 
+parser.add_argument('--dataset', default = "PLANKTON", type = str, help='Dataset for evaluation', 
 									choices = ['PLANKTON'])
 parser.add_argument('--num_trials', default = 5, type = int, help='Number of trials to average results over?')
 parser.add_argument('--start_trial', default = 0, type = int, help='Trial number to start evaluation for?')
@@ -116,30 +115,30 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print("==> Testing known class accuracy before threshold")
 	acc_known, _ = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
 
-	threshold = 1.5
+	threshold = 0.0005
 	y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
 	print("==> Testing known class accuracy after threshold")
-	# print(f"Testing accuracy with threshold {threshold}")
 	acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
 
-	for th in range(0, 10):
-		threshold == 1*10**(-th)
-		y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
-		# print("==> Testing known class accuracy after threshold")
-		print(f"Testing accuracy with threshold {threshold}")
-		acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
+	# for th in range(0, 10):
+	# 	for K in range(10,1):
+	# 		threshold = K*10**(-th)
+	# 		y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
+	# 		# print("==> Testing known class accuracy after threshold")
+	# 		print(f"Testing accuracy with threshold {threshold}")
+	# 		acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
   
-	accuracy_known += [acc_known]
-	accuracy_known_th += [acc_known_th]
-	accuracy_unknown_th += [acc_unk_th]
+	accuracy_known += [round(acc_known, 4)]
+	accuracy_known_th += [round(acc_known_th, 4)]
+	accuracy_unknown_th += [round(acc_unk_th, 4)]
  
 	# Full accuracy score
 	accuracy = metrics.accuracy_th(y_pred, y)
-	all_accuracy += [accuracy]
+	all_accuracy += [round(accuracy, 4)]
 	
 	print('==> Evaluating open set network AUROC for trial {}..'.format(trial_num))
 	auroc = metrics.auroc_th(y_pred[mask_known], y_pred[mask_unk])
-	all_auroc += [auroc]
+	all_auroc += [round(auroc, 4)]
 
 mean_auroc = np.mean(all_auroc)
 mean_acc = np.mean(all_accuracy)
