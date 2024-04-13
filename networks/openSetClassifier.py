@@ -45,19 +45,20 @@ class openSetClassifier(nn.Module):
             # Change the fc layer to have only num_train_classes outputs
             num_features = model.classifier.in_features
             model.classifier = nn.Linear(num_features, 128 * 8 * 8)
-        elif backbone == "vit":
-            # model, _, _ = open_clip.create_model_and_transforms('hf-hub:imageomics/bioclip', jit=False)
-            # model = nn.Sequential(model.encode_image, nn.Linear(512, 128 * 8 * 8))
-            model = vit_b_32(weights="DEFAULT")
-            num_features = model.heads.head.in_features
-            model.heads.head = nn.Linear(num_features, 128 * 8 * 8)
-            
-            
         else:
             model = BaseEncoder(num_channels, init_weights, dropout)
-            self.classify = nn.Linear(128 * 28 * 28, num_classes)
-            
+
         self.encoder = model
+
+        if im_size == 32:
+            self.classify = nn.Linear(128 * 4 * 4, num_classes)
+        elif im_size == 64:
+            self.classify = nn.Linear(128 * 8 * 8, num_classes)
+        elif im_size == 224:
+            self.classify = nn.Linear(128 * 8 * 8, num_classes)
+        else:
+            print("That image size has not been implemented, sorry.")
+            exit()
 
         self.anchors = nn.Parameter(
             torch.zeros(self.num_classes, self.num_classes).double(),

@@ -61,8 +61,6 @@ transform = v2.Compose(
         v2.Grayscale(num_output_channels=1),
         v2.ToImage(),
         v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0], 
-                     std=[1]),
     ]
 )
 
@@ -70,10 +68,11 @@ transform = v2.Compose(
 
 # Define path
 path = "../main_dataset"
+path = "../main_dataset"
 
 
 parser = argparse.ArgumentParser(description='Closed Set Classifier Training')
-parser.add_argument('--dataset', default = "MNIST", type = str, help='Dataset for evaluation', 
+parser.add_argument('--dataset', default = "PLANKTON", type = str, help='Dataset for evaluation', 
 									choices = ['PLANKTON'])
 parser.add_argument('--num_trials', default = 5, type = int, help='Number of trials to average results over?')
 parser.add_argument('--start_trial', default = 0, type = int, help='Trial number to start evaluation for?')
