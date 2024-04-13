@@ -37,7 +37,7 @@ parser.add_argument('--resume', '-r', action='store_true', help='Resume from the
 parser.add_argument('--alpha', default = 10, type = int, help='Magnitude of the anchor point')
 parser.add_argument('--lbda', default = 0.1, type = float, help='Weighting of Anchor loss component')
 parser.add_argument('--tensorboard', '-t', action='store_true', help='Plot on tensorboardX')
-parser.add_argument('--backbone', default = None, type = str, help='Define backbone model', choices = ['resnet', 'densenet'])
+parser.add_argument('--backbone', default = None, type = str, help='Define backbone model', choices = ['resnet', 'densenet', "vit"])
 parser.add_argument('--name', default = "myTest", type = str, help='Optional name for saving and tensorboard') 
 args = parser.parse_args()
 
@@ -45,6 +45,7 @@ if args.tensorboard:
 	from torch.utils.tensorboard import SummaryWriter
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(device)
 
 #parameters useful when resuming and finetuning
 best_acc = 0
@@ -58,7 +59,7 @@ with open('datasets/config.json') as config_file:
 	cfg = json.load(config_file)[args.dataset]
 
 # Define path
-path = "./main_dataset"
+path = "../main_dataset"
 
 # Dataset id for open-set test set
 test_idx = [3 * (args.trial), 3 * (args.trial) + 1, 3 * (args.trial) + 2]
@@ -86,7 +87,6 @@ net = net.to(device)
 training_iter = int(args.resume)
 
 # Train and validation
-
 
 net.train()
 optimizer = optim.SGD(net.parameters(), lr = cfg['openset_training']['learning_rate'][0], 
@@ -212,6 +212,7 @@ def val(epoch):
 		writer.add_scalar('val/accuracy', acc, epoch)
   
 max_epoch = cfg['openset_training']['max_epoch'][training_iter]+start_epoch
+max_epoch = 100
 for epoch in range(start_epoch, max_epoch):
 	train(epoch)
 	val(epoch)

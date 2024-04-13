@@ -15,10 +15,49 @@ import metrics
 import scipy.stats as st
 import numpy as np
 from dataset_utils import create_dataset
+from sklearn.metrics import  accuracy_score
+
+
+def find_threshold(num_train_classes, dists, y, y_pred):
+    # Initialize list to store the best threshold for each class
+    best_thresholds = [0] * 12
+
+    # Iterate over each class
+    for _class in range(12):
+        best_accuracy = 0
+        
+        # Iterate over potential threshold values
+        for pot in range(-1, 8):
+            for K in range(9, 0, -1):
+                threshold = K * 10**(-pot)
+                pred_labels = []
+                correct_labels = []
+                
+                # Evaluate accuracy using the current threshold
+                for i in range(y.shape[0]):
+                    proposed_class = y_pred[i]
+                    if proposed_class == _class:
+                        correct_labels.append(y[i])
+                        if dists[i, proposed_class] > threshold:
+                            proposed_class = num_train_classes
+                        pred_labels.append(proposed_class)
+                
+                # Calculate accuracy
+                acc = accuracy_score(correct_labels, pred_labels)
+                
+                # Update best accuracy and threshold if current accuracy is better
+                if acc >= best_accuracy:
+                    best_accuracy = acc
+                    best_threshold = threshold
+        
+        # Store the best threshold for the current class
+        best_thresholds[_class] = best_threshold
+        print(f"Class {_class}: Best accuracy = {best_accuracy}, Best threshold = {best_threshold}")
+
+    return best_thresholds
 
 # Define path
-path = "./main_dataset"
-
+path = "../main_dataset"
 
 parser = argparse.ArgumentParser(description='Closed Set Classifier Training')
 parser.add_argument('--dataset', default = "MNIST", type = str, help='Dataset for evaluation', 
@@ -110,25 +149,31 @@ for trial_num in range(args.start_trial, args.start_trial + args.num_trials):
 	print("==> Testing known class accuracy before threshold")
 	acc_known, _ = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
 
-	threshold = 1.5
-	y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
-	print("==> Testing known class accuracy after threshold")
-	# print(f"Testing accuracy with threshold {threshold}")
-	acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
- 
-	accuracy_known += [acc_known]
-	accuracy_known_th += [acc_known_th]
-	accuracy_unknown_th += [acc_unk_th]
+	threshold = find_threshold(cfg['num_known_classes'], x, y, y_pred)
+	pred_labels=[]
+	for i in range(y.shape[0]):
+		proposed_Class=y_pred[i]
+		if(x[i, proposed_Class]>threshold[proposed_Class]):
+			proposed_Class=cfg['num_known_classes']
+		pred_labels.append(proposed_Class)
+  
+	acc_known_th, acc_unk_th = metrics.calc_accuracies(y, pred_labels, cfg["num_known_classes"])
+	pred_labels = np.array(pred_labels)
+	# y_pred[np.min(x, axis=1) > threshold] = cfg["num_known_classes"]
+	# print("==> Testing known class accuracy after threshold")
+	# acc_known_th, acc_unk_th = metrics.calc_accuracies(y, y_pred, cfg["num_known_classes"])
+
+	accuracy_known += [round(acc_known, 4)]
+	accuracy_known_th += [round(acc_known_th, 4)]
+	accuracy_unknown_th += [round(acc_unk_th, 4)]
  
 	# Full accuracy score
-	accuracy = metrics.accuracy_th(y_pred, y)
-	all_accuracy += [accuracy]
+	accuracy = metrics.accuracy_th(pred_labels, y)
+	all_accuracy += [round(accuracy, 4)]
 	
 	print('==> Evaluating open set network AUROC for trial {}..'.format(trial_num))
-	auroc = metrics.auroc_th(y_pred[mask_known], y_pred[mask_unk])
-	all_auroc += [auroc]
-	print(accuracy)
-	print(auroc)
+	auroc = metrics.auroc_th(pred_labels[mask_known], pred_labels[mask_unk])
+	all_auroc += [round(auroc, 4)]
 
 mean_auroc = np.mean(all_auroc)
 mean_acc = np.mean(all_accuracy)

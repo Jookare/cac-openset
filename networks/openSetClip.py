@@ -40,7 +40,6 @@ class openSetClassifier(nn.Module):
 
 		x = x.view(batch_size, -1)
   
-
 		outLinear = self.classify(x)
 
 		if skip_distance:

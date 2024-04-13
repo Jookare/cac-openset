@@ -40,7 +40,7 @@ def auroc_th(inData, outData, in_low = True):
 	allData = np.concatenate((inData, outData))
 	labels = np.concatenate((np.zeros(len(inData)), np.ones(len(outData))))
 	fpr, tpr, thresholds = sklearn.metrics.roc_curve(labels, allData, pos_label = in_low)
-
+	
 	return sklearn.metrics.auc(fpr, tpr)
 
 

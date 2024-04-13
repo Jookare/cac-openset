@@ -1,5 +1,0 @@
-torchvision
-sklearn
-tensorboardX
-tensorboard
-

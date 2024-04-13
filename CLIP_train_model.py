@@ -48,7 +48,7 @@ with open('datasets/config.json') as config_file:
 	cfg = json.load(config_file)[args.dataset]
 
 # Define path
-path = "./main_dataset"
+path = "../main_dataset"
 
 # Dataset id for open-set test set
 test_idx = [3 * (args.trial), 3 * (args.trial) + 1, 3 * (args.trial) + 2]
